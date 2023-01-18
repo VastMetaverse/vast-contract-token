@@ -2,7 +2,7 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { expect } from "chai";
 import { ethers, upgrades } from "hardhat";
 
-import { VastToken } from "../typechain";
+import { VastToken, VastTokenV2 } from "../typechain";
 
 describe("VastToken", function () {
   this.timeout(0);
@@ -35,14 +35,14 @@ describe("VastToken", function () {
     const VastToken = await ethers.getContractFactory("VastToken");
     tokenContract1 = (await upgrades.deployProxy(
       VastToken,
-      ["TEST", "TEST", lzEndpointMock1.address],
+      [lzEndpointMock1.address],
       {
         kind: "uups",
       }
     )) as VastToken;
     tokenContract2 = (await upgrades.deployProxy(
       VastToken,
-      ["TEST", "TEST", lzEndpointMock2.address],
+      [lzEndpointMock2.address],
       {
         kind: "uups",
       }
@@ -71,6 +71,36 @@ describe("VastToken", function () {
         [tokenContract1.address, tokenContract2.address]
       )
     );
+  });
+
+  describe("admin", () => {
+    it("should fail to add admin (not owner)", async () => {
+      const transaction = tokenContract1
+        .connect(user1)
+        .addAdmin(user1.address);
+      await expect(transaction).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("should fail to add admin (invalid address)", async () => {
+      const transaction = tokenContract1
+        .connect(contractOwner)
+        .addAdmin('0x0000000000000000000000000000000000000000');
+      await expect(transaction).to.be.revertedWith("Invalid address");
+    });
+
+    it("should fail to remove admin (not owner)", async () => {
+      const transaction = tokenContract1
+        .connect(user1)
+        .removeAdmin(user1.address);
+      await expect(transaction).to.be.revertedWith("Ownable: caller is not the owner");
+    });
+
+    it("should fail to remove admin (invalid address)", async () => {
+      const transaction = tokenContract1
+        .connect(contractOwner)
+        .removeAdmin('0x0000000000000000000000000000000000000000');
+      await expect(transaction).to.be.revertedWith("Invalid address");
+    });
   });
 
   describe("award", () => {
@@ -135,9 +165,17 @@ describe("VastToken", function () {
 
     it("should redeem 3 points from user1", async () => {
       await tokenContract1.award(user1.address, 10);
-      await tokenContract1.createAdmin(contractAdmin.address);
+      await tokenContract1.addAdmin(contractAdmin.address);
       await tokenContract1.connect(contractAdmin).redeem(user1.address, 3);
       await expect(await tokenContract1.balanceOf(user1.address)).to.equal(7);
+    });
+
+    it("should fail to redeem points if admin privileges are revoked", async () => {
+      await tokenContract1.award(user1.address, 10);
+      await tokenContract1.addAdmin(contractAdmin.address);
+      await tokenContract1.removeAdmin(contractAdmin.address);
+      const transaction = tokenContract1.connect(contractAdmin).redeem(user1.address, 3);
+      await expect(transaction).to.be.revertedWith("Caller is not an admin");
     });
   });
 
@@ -192,9 +230,7 @@ describe("VastToken", function () {
       const transaction = tokenContract1
         .connect(user1)
         .transfer(user2.address, 5);
-      await expect(transaction).to.be.revertedWith(
-        "Forbidden()"
-      );
+      await expect(transaction).to.be.revertedWith("Forbidden()");
     });
 
     it("should fail to approve token", async () => {
@@ -204,9 +240,7 @@ describe("VastToken", function () {
         user2.address,
         5
       );
-      await expect(transaction).to.be.revertedWith(
-        "Forbidden()"
-      );
+      await expect(transaction).to.be.revertedWith("Forbidden()");
     });
 
     it("should fail to transfer token to another address", async () => {
@@ -214,9 +248,7 @@ describe("VastToken", function () {
       const transaction = tokenContract1
         .connect(user1)
         .approve(user2.address, 5);
-      await expect(transaction).to.be.revertedWith(
-        "Forbidden()"
-      );
+      await expect(transaction).to.be.revertedWith("Forbidden()");
     });
 
     it("should fail to increase allowance", async () => {
@@ -224,9 +256,7 @@ describe("VastToken", function () {
       const transaction = tokenContract1
         .connect(user1)
         .increaseAllowance(user2.address, 5);
-      await expect(transaction).to.be.revertedWith(
-        "Forbidden()"
-      );
+      await expect(transaction).to.be.revertedWith("Forbidden()");
     });
 
     it("should fail to decrease allowance", async () => {
@@ -234,9 +264,7 @@ describe("VastToken", function () {
       const transaction = tokenContract1
         .connect(user1)
         .decreaseAllowance(user2.address, 5);
-      await expect(transaction).to.be.revertedWith(
-        "Forbidden()"
-      );
+      await expect(transaction).to.be.revertedWith("Forbidden()");
     });
 
     it("should have 0 allowance", async () => {
@@ -244,6 +272,32 @@ describe("VastToken", function () {
       await expect(
         await tokenContract1.allowance(user1.address, user2.address)
       ).to.equal(0);
+    });
+  });
+
+  describe("upgrade", () => {
+    it("should allow upgrade", async () => {
+      const LayerZeroEndpointMock = await ethers.getContractFactory(
+        "LZEndpointMock"
+      );
+      const lzEndpointMock = await LayerZeroEndpointMock.deploy(chainId1);
+
+      const VastToken = await ethers.getContractFactory("VastToken");
+      const oldTokenContract = (await upgrades.deployProxy(
+        VastToken,
+        [lzEndpointMock.address],
+        {
+          kind: "uups",
+        }
+      )) as VastToken;
+
+      const VastTokenV2 = await ethers.getContractFactory("VastTokenV2");
+      const newTokenContract = (await upgrades.upgradeProxy(
+        oldTokenContract.address,
+        VastTokenV2
+      )) as VastTokenV2;
+
+      await expect(newTokenContract.address).to.be.a('string');
     });
   });
 });

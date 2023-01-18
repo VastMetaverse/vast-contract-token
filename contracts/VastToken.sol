@@ -11,8 +11,6 @@ import "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeabl
 
 import "./layerzero/contracts-upgradable/lzApp/NonblockingLzAppUpgradeable.sol";
 
-import "./extensions/VastAdminUpgradeable.sol";
-
 contract VastToken is
     Initializable,
     ERC20Upgradeable,
@@ -20,9 +18,10 @@ contract VastToken is
     OwnableUpgradeable,
     PausableUpgradeable,
     UUPSUpgradeable,
-    NonblockingLzAppUpgradeable,
-    VastAdminUpgradeable
+    NonblockingLzAppUpgradeable
 {
+    mapping(address => bool) private _admins;
+
     /**
      * @dev Error handling for forbidden operations.
      */
@@ -67,17 +66,13 @@ contract VastToken is
         uint64 __nonce
     );
 
-    function initialize(
-        string memory __name,
-        string memory __symbol,
-        address __lzEndpoint
-    ) public initializer {
-        __ERC20_init(__name, __symbol);
+    function initialize(address __lzEndpoint) public initializer {
+        __ERC20_init("VAST Token", "VAST");
         __NonblockingLzAppUpgradeable_init(__lzEndpoint);
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        createAdmin(owner());
+        addAdmin(owner());
     }
 
     function _authorizeUpgrade(address newImplementation)
@@ -271,6 +266,44 @@ contract VastToken is
      */
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    /**
+     * @dev Adds admin.
+     *
+     * Requirements:
+     *
+     * - `__address` must be an address.
+     */
+    function addAdmin(address __address)
+        public
+        onlyOwner
+    {
+        require(__address != address(0), "Invalid address");
+        _admins[__address] = true;
+    }
+
+    /**
+     * @dev Removes admin.
+     *
+     * Requirements:
+     *
+     * - `__address` must be an address.
+     */
+    function removeAdmin(address __address)
+        public
+        onlyOwner
+    {
+        require(__address != address(0), "Invalid address");
+        delete _admins[__address];
+    }
+
+    /**
+     * @dev Requires admin role.
+     */
+    modifier onlyAdmin() {
+        require(_admins[msg.sender], "Caller is not an admin");
+        _;
     }
 
     /**
