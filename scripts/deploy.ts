@@ -11,7 +11,7 @@ async function main() {
   const VastToken = await ethers.getContractFactory("VastToken");
   const vastToken = await upgrades.deployProxy(
     VastToken,
-    [lzContracts.metisGoerli],
+    [lzContracts.metisAndromeda],
     {
       kind: "uups",
     }

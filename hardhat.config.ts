@@ -83,9 +83,18 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
     apiKey: {
+      andromeda: process.env.ETHERSCAN_API_KEY!,
       metisGoerli: process.env.ETHERSCAN_API_KEY!
     },
     customChains: [
+      {
+        network: "andromeda",
+        chainId: 1088,
+        urls: {
+          apiURL: "https://andromeda-explorer.metis.io/api",
+          browserURL: "https://andromeda-explorer.metis.io"
+        }
+      },
       {
         network: "metisGoerli",
         chainId: 599,
